@@ -12,6 +12,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useUser } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
+import { toast } from "sonner";
 
 const VideoInfo = ({ video }: any) => {
   const [likes, setlikes] = useState(video.Like || 0);
@@ -21,19 +22,86 @@ const VideoInfo = ({ video }: any) => {
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { user } = useUser();
   const [isWatchLater, setIsWatchLater] = useState(false);
+  const [isChannelSubscribed, setIsChannelSubscribed] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [downloadWorking, setDownloadWorking] = useState(false);
+  const isOwnChannel = Boolean(
+    user?._id && String(video?.uploader) === String(user._id),
+  );
 
-  // const user: any = {
-  //   id: "1",
-  //   name: "John Doe",
-  //   email: "john@example.com",
-  //   image: "https://github.com/shadcn.png?height=32&width=32",
-  // };
   useEffect(() => {
     setlikes(video.Like || 0);
     setDislikes(video.Dislike || 0);
     setIsLiked(false);
     setIsDisliked(false);
   }, [video]);
+
+  useEffect(() => {
+    if (!user?._id || !video?._id) return;
+    axiosInstance
+      .get(`/like/${user._id}/video/${video._id}`)
+      .then((res) => {
+        setlikes(res.data.likes || 0);
+        setDislikes(res.data.dislikes || 0);
+        setIsLiked(Boolean(res.data.liked));
+        setIsDisliked(Boolean(res.data.disliked));
+      })
+      .catch(() => undefined);
+  }, [user?._id, video?._id]);
+
+  useEffect(() => {
+    if (!user?._id || !video?.uploader) return;
+    axiosInstance
+      .get(`/subscription/channels/${user._id}`)
+      .then((res) =>
+        setIsChannelSubscribed(
+          res.data.some(
+            (channel: any) => String(channel._id) === String(video.uploader),
+          ),
+        ),
+      )
+      .catch(() => undefined);
+  }, [user?._id, video?.uploader]);
+
+  useEffect(() => {
+    if (!user?._id || !video?._id) return;
+    axiosInstance
+      .get(`/download/${user._id}`)
+      .then((res) =>
+        setIsDownloaded(
+          (res.data?.downloads || []).some(
+            (downloadedVideo: any) =>
+              String(downloadedVideo._id) === String(video._id),
+          ),
+        ),
+      )
+      .catch(() => undefined);
+  }, [user?._id, video?._id]);
+
+  const toggleChannelSubscription = async () => {
+    if (!user?._id) {
+      toast.info("Sign in to subscribe to channels.");
+      return;
+    }
+    if (isOwnChannel) return;
+    try {
+      const res = await axiosInstance.post(
+        `/subscription/channels/${user._id}/${video.uploader}`,
+        { videoId: video._id },
+      );
+      setIsChannelSubscribed(Boolean(res.data.subscribed));
+      toast.success(
+        res.data.subscribed
+          ? "Subscribed to channel."
+          : "Subscription removed.",
+      );
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message ||
+          "Unable to update this channel subscription.",
+      );
+    }
+  };
 
   useEffect(() => {
     const handleviews = async () => {
@@ -51,30 +119,31 @@ const VideoInfo = ({ video }: any) => {
     };
     handleviews();
   }, [user]);
+
   const handleLike = async () => {
-    if (!user) return;
+    if (!user) {
+      toast.info("Sign in to like or dislike videos.");
+      return;
+    }
     try {
       const res = await axiosInstance.post(`/like/${video._id}`, {
         userId: user?._id,
+        reaction: "like",
       });
-      if (res.data.liked) {
-        if (isLiked) {
-          setlikes((prev: any) => prev - 1);
-          setIsLiked(false);
-        } else {
-          setlikes((prev: any) => prev + 1);
-          setIsLiked(true);
-          if (isDisliked) {
-            setDislikes((prev: any) => prev - 1);
-            setIsDisliked(false);
-          }
-        }
-      }
+      setlikes(res.data.likes || 0);
+      setDislikes(res.data.dislikes || 0);
+      setIsLiked(Boolean(res.data.liked));
+      setIsDisliked(Boolean(res.data.disliked));
     } catch (error) {
       console.log(error);
     }
   };
+
   const handleWatchLater = async () => {
+    if (!user) {
+      toast.info("Sign in to save videos to Watch Later.");
+      return;
+    }
     try {
       const res = await axiosInstance.post(`/watch/${video._id}`, {
         userId: user?._id,
@@ -88,29 +157,54 @@ const VideoInfo = ({ video }: any) => {
       console.log(error);
     }
   };
+
   const handleDislike = async () => {
-    if (!user) return;
+    if (!user) {
+      toast.info("Sign in to like or dislike videos.");
+      return;
+    }
     try {
       const res = await axiosInstance.post(`/like/${video._id}`, {
         userId: user?._id,
+        reaction: "dislike",
       });
-      if (!res.data.liked) {
-        if (isDisliked) {
-          setDislikes((prev: any) => prev - 1);
-          setIsDisliked(false);
-        } else {
-          setDislikes((prev: any) => prev + 1);
-          setIsDisliked(true);
-          if (isLiked) {
-            setlikes((prev: any) => prev - 1);
-            setIsLiked(false);
-          }
-        }
-      }
+      setlikes(res.data.likes || 0);
+      setDislikes(res.data.dislikes || 0);
+      setIsLiked(Boolean(res.data.liked));
+      setIsDisliked(Boolean(res.data.disliked));
     } catch (error) {
       console.log(error);
     }
   };
+
+  const handleDownload = async () => {
+    if (!user) {
+      toast.info("Sign in to download the video.");
+      return;
+    }
+    if (downloadWorking) return;
+    setDownloadWorking(true);
+    try {
+      if (isDownloaded) {
+        await axiosInstance.delete(`/download/${user._id}/${video._id}`);
+        setIsDownloaded(false);
+        toast.success("Removed from downloads.");
+      } else {
+        const res = await axiosInstance.post(
+          `/download/${user._id}/${video._id}`,
+        );
+        setIsDownloaded(true);
+        toast.success(res.data?.message || "Video downloaded.");
+      }
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message || "Unable to update download.",
+      );
+    } finally {
+      setDownloadWorking(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-semibold sm:text-xl">{video.videotitle}</h1>
@@ -124,7 +218,20 @@ const VideoInfo = ({ video }: any) => {
             <h3 className="font-medium">{video.videochanel}</h3>
             <p className="text-sm text-gray-600">1.2M subscribers</p>
           </div>
-          <Button className="sm:ml-2">Subscribe</Button>
+          <Button
+            className="sm:ml-2"
+            variant={
+              isChannelSubscribed || isOwnChannel ? "outline" : "default"
+            }
+            onClick={toggleChannelSubscription}
+            disabled={isOwnChannel}
+          >
+            {isOwnChannel
+              ? "Your channel"
+              : isChannelSubscribed
+                ? "Subscribed"
+                : "Subscribe"}
+          </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center bg-gray-100 rounded-full">
@@ -178,10 +285,18 @@ const VideoInfo = ({ video }: any) => {
           <Button
             variant="ghost"
             size="sm"
-            className="bg-gray-100 rounded-full"
+            className={`bg-gray-100 rounded-full ${
+              isDownloaded ? "text-primary" : ""
+            }`}
+            onClick={handleDownload}
+            disabled={downloadWorking}
           >
             <Download className="w-5 h-5 mr-2" />
-            Download
+            {downloadWorking
+              ? "Working..."
+              : isDownloaded
+                ? "Downloaded"
+                : "Download"}
           </Button>
           <Button
             variant="ghost"

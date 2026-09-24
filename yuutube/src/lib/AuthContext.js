@@ -1,6 +1,4 @@
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { createContext, useContext, useEffect, useState } from "react";
-import { provider, auth } from "./firebase";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import axiosInstance from "./axiosinstance";
 
 const UserContext = createContext({
@@ -12,14 +10,31 @@ const UserContext = createContext({
   setTheme: async (_theme) => {},
 });
 
-const istDefaultTheme = () => {
-  const hour = Number(new Intl.DateTimeFormat("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()));
-  return hour >= 5 && hour < 12 ? "light" : "dark";
+const normaliseTheme = (theme) =>
+  ["light", "dark", "system"].includes(theme) ? theme : "system";
+
+const getISTHour = () => {
+  const hourString = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    hour12: false,
+  });
+  return parseInt(hourString, 10) % 24;
 };
 
-const applyTheme = (theme) => {
+const isDaytimeIST = () => {
+  const hour = getISTHour();
+  return hour >= 5 && hour < 12;
+};
+
+const resolveTheme = (preference) => {
+  if (preference === "system") return isDaytimeIST() ? "light" : "dark";
+  return preference === "dark" ? "dark" : "light";
+};
+
+const applyTheme = (preference) => {
   if (typeof document === "undefined") return;
-  const resolved = theme === "system" ? istDefaultTheme() : theme;
+  const resolved = resolveTheme(preference);
   document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.style.colorScheme = resolved;
 };
@@ -27,23 +42,43 @@ const applyTheme = (theme) => {
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [theme, setThemeState] = useState("system");
+  const autoCheckInterval = useRef(null);
+
+  const startAutoThemeWatch = (preference) => {
+    if (autoCheckInterval.current) {
+      clearInterval(autoCheckInterval.current);
+      autoCheckInterval.current = null;
+    }
+    if (preference === "system") {
+      autoCheckInterval.current = setInterval(() => {
+        applyTheme("system");
+      }, 60000);
+    }
+  };
 
   const login = (userdata) => {
-    const savedTheme = userdata?.themePreference || localStorage.getItem("yuutube-theme") || "system";
+    const savedTheme = normaliseTheme(
+      userdata?.themePreference || localStorage.getItem("yuutube-theme"),
+    );
     setUser(userdata);
     setThemeState(savedTheme);
     localStorage.setItem("user", JSON.stringify(userdata));
     localStorage.setItem("yuutube-theme", savedTheme);
     applyTheme(savedTheme);
+    startAutoThemeWatch(savedTheme);
   };
 
   const setTheme = async (nextTheme) => {
-    setThemeState(nextTheme);
-    localStorage.setItem("yuutube-theme", nextTheme);
-    applyTheme(nextTheme);
+    const savedTheme = normaliseTheme(nextTheme);
+    setThemeState(savedTheme);
+    localStorage.setItem("yuutube-theme", savedTheme);
+    applyTheme(savedTheme);
+    startAutoThemeWatch(savedTheme);
     if (user?._id) {
       try {
-        const response = await axiosInstance.patch(`/user/update/${user._id}`, { themePreference: nextTheme });
+        const response = await axiosInstance.patch(`/user/update/${user._id}`, {
+          themePreference: savedTheme,
+        });
         setUser(response.data);
         localStorage.setItem("user", JSON.stringify(response.data));
       } catch (error) {
@@ -58,33 +93,83 @@ export const UserProvider = ({ children }) => {
     setThemeState("system");
     localStorage.removeItem("yuutube-theme");
     applyTheme("system");
-    try { await signOut(auth); } catch (error) { console.error("Error during sign out:", error); }
+    startAutoThemeWatch("system");
+    try {
+      if (typeof window !== "undefined") {
+        const { signOut } = await import("firebase/auth");
+        const { auth } = await import("./firebase");
+        await signOut(auth);
+      }
+    } catch (error) {
+      console.error("Error during sign out:", error);
+    }
   };
 
   const handlegooglesignin = async () => {
     try {
+      if (typeof window === "undefined") return;
+      const [{ signInWithPopup }, { auth, provider }] = await Promise.all([
+        import("firebase/auth"),
+        import("./firebase"),
+      ]);
       const result = await signInWithPopup(auth, provider);
       const firebaseuser = result.user;
-      const response = await axiosInstance.post("/user/login", { email: firebaseuser.email, name: firebaseuser.displayName, image: firebaseuser.photoURL || "https://github.com/shadcn.png" });
+      const response = await axiosInstance.post("/user/login", {
+        email: firebaseuser.email,
+        name: firebaseuser.displayName,
+        image: firebaseuser.photoURL || "https://github.com/shadcn.png",
+      });
       login(response.data.result);
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("yuutube-theme") || "system";
+    const savedTheme = normaliseTheme(localStorage.getItem("yuutube-theme"));
     setThemeState(savedTheme);
     applyTheme(savedTheme);
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseuser) => {
-      if (!firebaseuser) return;
+    startAutoThemeWatch(savedTheme);
+
+    let unsub = () => {};
+    (async () => {
+      if (typeof window === "undefined") return;
       try {
-        const response = await axiosInstance.post("/user/login", { email: firebaseuser.email, name: firebaseuser.displayName, image: firebaseuser.photoURL || "https://github.com/shadcn.png" });
-        login(response.data.result);
-      } catch (error) { console.error(error); }
-    });
-    return () => unsubscribe();
+        const [{ onAuthStateChanged }, { auth }] = await Promise.all([
+          import("firebase/auth"),
+          import("./firebase"),
+        ]);
+        unsub = onAuthStateChanged(auth, async (firebaseuser) => {
+          if (!firebaseuser) return;
+          try {
+            const response = await axiosInstance.post("/user/login", {
+              email: firebaseuser.email,
+              name: firebaseuser.displayName,
+              image: firebaseuser.photoURL || "https://github.com/shadcn.png",
+            });
+            login(response.data.result);
+          } catch (error) {
+            console.error(error);
+          }
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+
+    return () => {
+      unsub();
+      if (autoCheckInterval.current) clearInterval(autoCheckInterval.current);
+    };
   }, []);
 
-  return <UserContext.Provider value={{ user, login, logout, handlegooglesignin, theme, setTheme }}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider
+      value={{ user, login, logout, handlegooglesignin, theme, setTheme }}
+    >
+      {children}
+    </UserContext.Provider>
+  );
 };
 
 export const useUser = () => useContext(UserContext);

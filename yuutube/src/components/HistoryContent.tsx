@@ -110,7 +110,11 @@ export default function HistoryContent() {
                 {formatDistanceToNow(new Date(item.videoid.createdAt))} ago
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Added {formatDistanceToNow(new Date(item.createdAt))} ago
+                Watched{" "}
+                {formatDistanceToNow(
+                  new Date(item.likedon || item.updatedAt || item.createdAt),
+                )}{" "}
+                ago
               </p>
             </div>
 

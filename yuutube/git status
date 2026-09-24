@@ -1,0 +1,10 @@
+* [33m9fcae45[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32minternship-b1[m[33m)[m Completed all features except the video call.
+* [33m4945f2c[m Added membership, subscriptions, downloads and UI/UX fixes
+* [33m7f4decb[m[33m ([m[1;31morigin/internship-b1[m[33m)[m Implenmented a video player, advanced comments and account security page
+* [33m11b659c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix yuutube folder tracking
+* [33ma96123e[m Finall fix
+* [33m5d5f298[m Final fix
+* [33mc45bef7[m Fixed the channel and watch page giving 404 error
+* [33m51f29be[m Rolledback to previous change because the newer one did not work
+* [33m88cc547[m Changed to prvious code because it worked and just needed to change the deploy settings on render.com
+* [33me1744a1[m Modified  server/package.json so that it is deployable on render.com

@@ -1,4 +1,10 @@
-import { Flag, MessageCircle, ThumbsDown, ThumbsUp } from "lucide-react";
+import {
+  Flag,
+  Languages,
+  MessageCircle,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -23,6 +29,106 @@ interface Comment {
   dislikes?: string[];
 }
 
+const TRANSLATE_LANGUAGES = [
+  { code: "sq", label: "Albanian" },
+  { code: "am", label: "Amharic" },
+  { code: "ar", label: "Arabic" },
+  { code: "hy", label: "Armenian" },
+  { code: "as", label: "Assamese" },
+  { code: "az", label: "Azerbaijani" },
+  { code: "eu", label: "Basque" },
+  { code: "be", label: "Belarusian" },
+  { code: "bn", label: "Bengali" },
+  { code: "bs", label: "Bosnian" },
+  { code: "bg", label: "Bulgarian" },
+  { code: "my", label: "Burmese" },
+  { code: "ca", label: "Catalan" },
+  { code: "zh-CN", label: "Chinese (Simplified)" },
+  { code: "zh-TW", label: "Chinese (Traditional)" },
+  { code: "hr", label: "Croatian" },
+  { code: "cs", label: "Czech" },
+  { code: "da", label: "Danish" },
+  { code: "nl", label: "Dutch" },
+  { code: "en", label: "English" },
+  { code: "eo", label: "Esperanto" },
+  { code: "et", label: "Estonian" },
+  { code: "fi", label: "Finnish" },
+  { code: "fr", label: "French" },
+  { code: "gl", label: "Galician" },
+  { code: "ka", label: "Georgian" },
+  { code: "de", label: "German" },
+  { code: "el", label: "Greek" },
+  { code: "gu", label: "Gujarati" },
+  { code: "ht", label: "Haitian Creole" },
+  { code: "ha", label: "Hausa" },
+  { code: "he", label: "Hebrew" },
+  { code: "hi", label: "Hindi" },
+  { code: "hu", label: "Hungarian" },
+  { code: "is", label: "Icelandic" },
+  { code: "ig", label: "Igbo" },
+  { code: "id", label: "Indonesian" },
+  { code: "ga", label: "Irish" },
+  { code: "it", label: "Italian" },
+  { code: "ja", label: "Japanese" },
+  { code: "jv", label: "Javanese" },
+  { code: "kn", label: "Kannada" },
+  { code: "kk", label: "Kazakh" },
+  { code: "km", label: "Khmer" },
+  { code: "ko", label: "Korean" },
+  { code: "ku", label: "Kurdish" },
+  { code: "ky", label: "Kyrgyz" },
+  { code: "lo", label: "Lao" },
+  { code: "lv", label: "Latvian" },
+  { code: "lt", label: "Lithuanian" },
+  { code: "lb", label: "Luxembourgish" },
+  { code: "mk", label: "Macedonian" },
+  { code: "mg", label: "Malagasy" },
+  { code: "ms", label: "Malay" },
+  { code: "ml", label: "Malayalam" },
+  { code: "mt", label: "Maltese" },
+  { code: "mi", label: "Maori" },
+  { code: "mr", label: "Marathi" },
+  { code: "mn", label: "Mongolian" },
+  { code: "ne", label: "Nepali" },
+  { code: "no", label: "Norwegian" },
+  { code: "or", label: "Odia" },
+  { code: "ps", label: "Pashto" },
+  { code: "fa", label: "Persian" },
+  { code: "pl", label: "Polish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "pa", label: "Punjabi" },
+  { code: "ro", label: "Romanian" },
+  { code: "ru", label: "Russian" },
+  { code: "sm", label: "Samoan" },
+  { code: "gd", label: "Scots Gaelic" },
+  { code: "sr", label: "Serbian" },
+  { code: "sn", label: "Shona" },
+  { code: "sd", label: "Sindhi" },
+  { code: "si", label: "Sinhala" },
+  { code: "sk", label: "Slovak" },
+  { code: "sl", label: "Slovenian" },
+  { code: "so", label: "Somali" },
+  { code: "es", label: "Spanish" },
+  { code: "su", label: "Sundanese" },
+  { code: "sw", label: "Swahili" },
+  { code: "sv", label: "Swedish" },
+  { code: "tl", label: "Tagalog" },
+  { code: "tg", label: "Tajik" },
+  { code: "ta", label: "Tamil" },
+  { code: "te", label: "Telugu" },
+  { code: "th", label: "Thai" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "ur", label: "Urdu" },
+  { code: "uz", label: "Uzbek" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "cy", label: "Welsh" },
+  { code: "xh", label: "Xhosa" },
+  { code: "yi", label: "Yiddish" },
+  { code: "yo", label: "Yoruba" },
+  { code: "zu", label: "Zulu" },
+];
+
 const Comments = ({ videoId }: { videoId: string }) => {
   const { user } = useUser();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -32,6 +138,11 @@ const Comments = ({ videoId }: { videoId: string }) => {
   const [sort, setSort] = useState("newest");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState<Record<string, boolean>>({});
+  const [translateLangFor, setTranslateLangFor] = useState<
+    Record<string, string>
+  >({});
 
   const loadComments = async () => {
     try {
@@ -151,6 +262,33 @@ const Comments = ({ videoId }: { videoId: string }) => {
     setReplyTo(null);
     setText(comment.commentbody);
   };
+
+  const translateComment = async (comment: Comment) => {
+    const targetLang = translateLangFor[comment._id] || "hi";
+    setTranslating((prev) => ({ ...prev, [comment._id]: true }));
+    try {
+      const res = await axiosInstance.post("/translate", {
+        text: comment.commentbody,
+        targetLang,
+      });
+      setTranslations((prev) => ({
+        ...prev,
+        [comment._id]: res.data.translatedText,
+      }));
+    } catch (err) {
+      setMessage(error(err));
+    } finally {
+      setTranslating((prev) => ({ ...prev, [comment._id]: false }));
+    }
+  };
+  const clearTranslation = (id: string) => {
+    setTranslations((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const writeBox = (action: () => void, placeholder: string) => (
     <div className="mt-2 space-y-2">
       <Textarea
@@ -206,11 +344,11 @@ const Comments = ({ videoId }: { videoId: string }) => {
             <p
               className={`mt-1 break-words text-sm ${comment.isDeleted ? "italic text-muted-foreground" : ""}`}
             >
-              {comment.commentbody}
+              {translations[comment._id] || comment.commentbody}
             </p>
           )}
           {!comment.isDeleted && editing !== comment._id && (
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
@@ -264,6 +402,43 @@ const Comments = ({ videoId }: { videoId: string }) => {
                     Delete
                   </Button>
                 </>
+              )}
+              <select
+                value={translateLangFor[comment._id] || "hi"}
+                onChange={(event) =>
+                  setTranslateLangFor((prev) => ({
+                    ...prev,
+                    [comment._id]: event.target.value,
+                  }))
+                }
+                className="rounded-md border bg-background px-1.5 py-1 text-xs"
+                aria-label="Translate to"
+              >
+                {TRANSLATE_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+              {translations[comment._id] ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => clearTranslation(comment._id)}
+                >
+                  <Languages />
+                  Show original
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => translateComment(comment)}
+                  disabled={translating[comment._id]}
+                >
+                  <Languages />
+                  {translating[comment._id] ? "Translating..." : "Translate"}
+                </Button>
               )}
             </div>
           )}

@@ -190,34 +190,40 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
     setCaptionsEnabled(nextValue);
   }, [captionsEnabled]);
 
-  const handlePlayerKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      const target = event.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName))
-        return;
-
-      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const runKeyboardShortcut = useCallback(
+    (key: string, shiftKey = false) => {
       const shortcuts: Record<string, () => void> = {
         " ": () => void togglePlay(),
-        ArrowLeft: () => seekBy(event.shiftKey ? -30 : -10),
-        ArrowRight: () => seekBy(event.shiftKey ? 30 : 10),
+        k: () => void togglePlay(),
+        ArrowLeft: () => seekBy(shiftKey ? -30 : -10),
+        j: () => seekBy(-10),
+        ArrowRight: () => seekBy(shiftKey ? 30 : 10),
+        l: () => seekBy(10),
         ArrowUp: () => updateVolume(volume + 0.05),
         ArrowDown: () => updateVolume(volume - 0.05),
+        Home: () => seekBy(-(videoRef.current?.currentTime || 0)),
+        End: () =>
+          seekBy(
+            (videoRef.current?.duration || 0) -
+              (videoRef.current?.currentTime || 0),
+          ),
         m: toggleMute,
         f: () => void toggleFullscreen(),
         p: () => void togglePictureInPicture(),
         t: () => setIsTheaterMode((value) => !value),
         c: toggleCaptions,
       };
-      const action = shortcuts[key];
-      if (action) {
-        event.preventDefault();
-        action();
-        revealControls();
+      if (/^[0-9]$/.test(key) && videoRef.current?.duration) {
+        videoRef.current.currentTime =
+          (Number(key) / 10) * videoRef.current.duration;
+        return true;
       }
+      const action = shortcuts[key];
+      if (!action) return false;
+      action();
+      return true;
     },
     [
-      revealControls,
       seekBy,
       toggleCaptions,
       toggleFullscreen,
@@ -228,6 +234,45 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
       volume,
     ],
   );
+
+  const handlePlayerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName))
+        return;
+
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if (runKeyboardShortcut(key, event.shiftKey)) {
+        event.preventDefault();
+        revealControls();
+      }
+    },
+    [revealControls, runKeyboardShortcut],
+  );
+
+  useEffect(() => {
+    const handlePageShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        target?.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(
+          target?.tagName || "",
+        )
+      )
+        return;
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      if (runKeyboardShortcut(key, event.shiftKey)) {
+        event.preventDefault();
+        revealControls();
+      }
+    };
+    window.addEventListener("keydown", handlePageShortcut);
+    return () => window.removeEventListener("keydown", handlePageShortcut);
+  }, [revealControls, runKeyboardShortcut]);
 
   useEffect(() => {
     const pauseOtherVideos = (event: Event) => {
