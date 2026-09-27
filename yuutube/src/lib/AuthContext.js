@@ -123,11 +123,12 @@ export const UserProvider = ({ children }) => {
 
   const handlegooglesignin = async () => {
     try {
+      console.log("[auth-debug] Starting signInWithRedirect...")
       await signInWithRedirect(auth, provider);
       // Browser navigates away here; execution resumes on redirect back,
       // handled by getRedirectResult in the effect below.
     } catch (error) {
-      console.error("Error starting sign-in redirect:", error);
+      console.error("[auth-debug] Error starting sign-in redirect:", error);
     }
   };
 
@@ -140,17 +141,28 @@ export const UserProvider = ({ children }) => {
     let unsub = () => {};
 
     (async () => {
+      console.log("[auth-debug] Effect running, checking redirect result...");
       try {
-        // Handles the user landing back on the site after a redirect sign-in.
         const redirectResult = await getRedirectResult(auth);
+        console.log("[auth-debug] getRedirectResult resolved:", redirectResult);
         if (redirectResult?.user) {
+          console.log(
+            "[auth-debug] Redirect user found, completing login:",
+            redirectResult.user.email,
+          );
           await completeLogin(redirectResult.user);
+        } else {
+          console.log("[auth-debug] No redirect user present.");
         }
       } catch (error) {
-        console.error("Error processing redirect result:", error);
+        console.error("[auth-debug] getRedirectResult threw an error:", error);
       }
 
       unsub = onAuthStateChanged(auth, async (firebaseuser) => {
+        console.log(
+          "[auth-debug] onAuthStateChanged fired with:",
+          firebaseuser?.email || null,
+        );
         if (!firebaseuser) return;
         await completeLogin(firebaseuser);
       });
