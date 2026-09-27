@@ -1,10 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import {
-  signInWithRedirect,
-  getRedirectResult,
-  onAuthStateChanged,
-  signOut,
-} from "firebase/auth";
+import { signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, provider } from "./firebase";
 import axiosInstance from "./axiosinstance";
 
@@ -123,12 +118,20 @@ export const UserProvider = ({ children }) => {
 
   const handlegooglesignin = async () => {
     try {
-      console.log("[auth-debug] Starting signInWithRedirect...")
-      await signInWithRedirect(auth, provider);
-      // Browser navigates away here; execution resumes on redirect back,
-      // handled by getRedirectResult in the effect below.
+      const result = await signInWithPopup(auth, provider);
+      if (result?.user) {
+        await completeLogin(result.user);
+      }
     } catch (error) {
-      console.error("[auth-debug] Error starting sign-in redirect:", error);
+      if (error?.code === "auth/popup-blocked") {
+        console.error(
+          "Sign-in popup was blocked. Please allow popups for this site and try again.",
+        );
+      } else if (error?.code === "auth/popup-closed-by-user") {
+        // User closed the popup intentionally — no action needed.
+      } else {
+        console.error("Error during sign-in:", error);
+      }
     }
   };
 
@@ -138,35 +141,10 @@ export const UserProvider = ({ children }) => {
     applyTheme(savedTheme);
     startAutoThemeWatch(savedTheme);
 
-    let unsub = () => {};
-
-    (async () => {
-      console.log("[auth-debug] Effect running, checking redirect result...");
-      try {
-        const redirectResult = await getRedirectResult(auth);
-        console.log("[auth-debug] getRedirectResult resolved:", redirectResult);
-        if (redirectResult?.user) {
-          console.log(
-            "[auth-debug] Redirect user found, completing login:",
-            redirectResult.user.email,
-          );
-          await completeLogin(redirectResult.user);
-        } else {
-          console.log("[auth-debug] No redirect user present.");
-        }
-      } catch (error) {
-        console.error("[auth-debug] getRedirectResult threw an error:", error);
-      }
-
-      unsub = onAuthStateChanged(auth, async (firebaseuser) => {
-        console.log(
-          "[auth-debug] onAuthStateChanged fired with:",
-          firebaseuser?.email || null,
-        );
-        if (!firebaseuser) return;
-        await completeLogin(firebaseuser);
-      });
-    })();
+    const unsub = onAuthStateChanged(auth, async (firebaseuser) => {
+      if (!firebaseuser) return;
+      await completeLogin(firebaseuser);
+    });
 
     return () => {
       unsub();
