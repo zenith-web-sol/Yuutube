@@ -1,4 +1,11 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  signOut,
+} from "firebase/auth";
+import { auth, provider } from "./firebase";
 import axiosInstance from "./axiosinstance";
 
 const UserContext = createContext({
@@ -95,25 +102,14 @@ export const UserProvider = ({ children }) => {
     applyTheme("system");
     startAutoThemeWatch("system");
     try {
-      if (typeof window !== "undefined") {
-        const { signOut } = await import("firebase/auth");
-        const { auth } = await import("./firebase");
-        await signOut(auth);
-      }
+      await signOut(auth);
     } catch (error) {
       console.error("Error during sign out:", error);
     }
   };
 
-  const handlegooglesignin = async () => {
+  const completeLogin = async (firebaseuser) => {
     try {
-      if (typeof window === "undefined") return;
-      const [{ signInWithPopup }, { auth, provider }] = await Promise.all([
-        import("firebase/auth"),
-        import("./firebase"),
-      ]);
-      const result = await signInWithPopup(auth, provider);
-      const firebaseuser = result.user;
       const response = await axiosInstance.post("/user/login", {
         email: firebaseuser.email,
         name: firebaseuser.displayName,
@@ -121,7 +117,17 @@ export const UserProvider = ({ children }) => {
       });
       login(response.data.result);
     } catch (error) {
-      console.error(error);
+      console.error("Error completing login:", error);
+    }
+  };
+
+  const handlegooglesignin = async () => {
+    try {
+      await signInWithRedirect(auth, provider);
+      // Browser navigates away here; execution resumes on redirect back,
+      // handled by getRedirectResult in the effect below.
+    } catch (error) {
+      console.error("Error starting sign-in redirect:", error);
     }
   };
 
@@ -132,29 +138,22 @@ export const UserProvider = ({ children }) => {
     startAutoThemeWatch(savedTheme);
 
     let unsub = () => {};
+
     (async () => {
-      if (typeof window === "undefined") return;
       try {
-        const [{ onAuthStateChanged }, { auth }] = await Promise.all([
-          import("firebase/auth"),
-          import("./firebase"),
-        ]);
-        unsub = onAuthStateChanged(auth, async (firebaseuser) => {
-          if (!firebaseuser) return;
-          try {
-            const response = await axiosInstance.post("/user/login", {
-              email: firebaseuser.email,
-              name: firebaseuser.displayName,
-              image: firebaseuser.photoURL || "https://github.com/shadcn.png",
-            });
-            login(response.data.result);
-          } catch (error) {
-            console.error(error);
-          }
-        });
+        // Handles the user landing back on the site after a redirect sign-in.
+        const redirectResult = await getRedirectResult(auth);
+        if (redirectResult?.user) {
+          await completeLogin(redirectResult.user);
+        }
       } catch (error) {
-        console.error(error);
+        console.error("Error processing redirect result:", error);
       }
+
+      unsub = onAuthStateChanged(auth, async (firebaseuser) => {
+        if (!firebaseuser) return;
+        await completeLogin(firebaseuser);
+      });
     })();
 
     return () => {
