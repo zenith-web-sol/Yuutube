@@ -44,12 +44,15 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  title,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  const noAutoTooltip = (props as Record<string, unknown>)["data-no-auto-tooltip"];
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      title={noAutoTooltip ? undefined : title || props["aria-label"]}
       {...props}
     />
   )

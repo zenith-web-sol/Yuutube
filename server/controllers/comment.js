@@ -1,10 +1,13 @@
 import mongoose from "mongoose";
 import comment from "../Modals/comment.js";
+import users from "../Modals/Auth.js";
 
 const BLOCKED_WORDS = ["fuck", "shit", "bitch", "asshole"];
 const REPORT_REASONS = ["Spam", "Harassment", "Offensive content", "Other"];
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MS = 15 * 1000;
+const MAX_STRIKES = 3;
+const CAPTCHA_EXPIRY_MINUTES = 5;
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -16,12 +19,36 @@ const validateCommentText = (value) => {
     return "Comments must be between 1 and 1000 characters.";
   if (/https?:\/\/|www\./i.test(text))
     return "Links are not allowed in comments.";
-  if (
-    BLOCKED_WORDS.some((word) => new RegExp(`\\b${word}\\b`, "i").test(text))
-  ) {
-    return "Please keep comments respectful.";
-  }
   return null;
+};
+
+const containsProfanity = (value) =>
+  BLOCKED_WORDS.some((word) =>
+    new RegExp(`\\b${word}\\b`, "i").test(String(value || "")),
+  );
+
+const generateCaptcha = () => {
+  const operators = ["+", "-", "*"];
+  const operator = operators[Math.floor(Math.random() * operators.length)];
+  let a, b, answer;
+  if (operator === "+") {
+    a = Math.floor(Math.random() * 20) + 1;
+    b = Math.floor(Math.random() * 20) + 1;
+    answer = a + b;
+  } else if (operator === "-") {
+    a = Math.floor(Math.random() * 20) + 10;
+    b = Math.floor(Math.random() * 10) + 1;
+    answer = a - b;
+  } else {
+    a = Math.floor(Math.random() * 10) + 1;
+    b = Math.floor(Math.random() * 10) + 1;
+    answer = a * b;
+  }
+  return {
+    question: `${a} ${operator} ${b}`,
+    answer,
+    expiresAt: new Date(Date.now() + CAPTCHA_EXPIRY_MINUTES * 60000),
+  };
 };
 
 export const postcomment = async (req, res) => {
@@ -33,9 +60,9 @@ export const postcomment = async (req, res) => {
     usercommented,
     userimage,
     language,
+    captchaAnswer,
   } = req.body;
-  const textError = validateCommentText(commentbody);
-  if (textError) return res.status(400).json({ message: textError });
+
   if (
     !isValidId(videoid) ||
     !isValidId(userid) ||
@@ -45,6 +72,71 @@ export const postcomment = async (req, res) => {
   }
 
   try {
+    const commentingUser = await users.findById(userid);
+    if (!commentingUser)
+      return res.status(404).json({ message: "User not found." });
+
+    // Gate: if this account is flagged, a correctly-solved CAPTCHA must
+    // accompany every comment from here on.
+    if (commentingUser.requiresCaptcha) {
+      if (
+        captchaAnswer === undefined ||
+        captchaAnswer === null ||
+        captchaAnswer === ""
+      ) {
+        const challenge = generateCaptcha();
+        commentingUser.pendingCommentCaptcha = challenge;
+        await commentingUser.save();
+        return res.status(428).json({
+          captchaRequired: true,
+          question: challenge.question,
+          message: "Please solve this to continue commenting.",
+        });
+      }
+
+      const pending = commentingUser.pendingCommentCaptcha;
+      const expired = !pending || new Date(pending.expiresAt) < new Date();
+      const wrong = !expired && Number(captchaAnswer) !== pending.answer;
+
+      if (expired || wrong) {
+        const challenge = generateCaptcha();
+        commentingUser.pendingCommentCaptcha = challenge;
+        await commentingUser.save();
+        return res.status(400).json({
+          captchaRequired: true,
+          question: challenge.question,
+          message: expired
+            ? "That expired. Solve this one instead."
+            : "That wasn't right. Try this one instead.",
+        });
+      }
+
+      commentingUser.pendingCommentCaptcha = null;
+      await commentingUser.save();
+    }
+
+    const textError = validateCommentText(commentbody);
+    if (textError) return res.status(400).json({ message: textError });
+
+    if (containsProfanity(commentbody)) {
+      commentingUser.profanityStrikes += 1;
+      let message = `Please keep comments respectful. (Strike ${commentingUser.profanityStrikes}/${MAX_STRIKES})`;
+      if (
+        commentingUser.profanityStrikes >= MAX_STRIKES &&
+        !commentingUser.requiresCaptcha
+      ) {
+        commentingUser.requiresCaptcha = true;
+        message =
+          "Your account has been flagged for repeated inappropriate language. You'll need to solve a quick check before your next comment.";
+      }
+      await commentingUser.save();
+      return res.status(400).json({
+        message,
+        flagged: commentingUser.requiresCaptcha,
+        strikes: commentingUser.profanityStrikes,
+      });
+    }
+
     if (parentid) {
       const parent = await comment.findOne({ _id: parentid, videoid });
       if (!parent)
@@ -71,11 +163,9 @@ export const postcomment = async (req, res) => {
       createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_MS) },
     });
     if (recent)
-      return res
-        .status(429)
-        .json({
-          message: "Please wait a few seconds before commenting again.",
-        });
+      return res.status(429).json({
+        message: "Please wait a few seconds before commenting again.",
+      });
 
     const savedComment = await comment.create({
       videoid,
@@ -118,6 +208,10 @@ export const editcomment = async (req, res) => {
   const { userid, commentbody } = req.body;
   const textError = validateCommentText(commentbody);
   if (textError) return res.status(400).json({ message: textError });
+  if (containsProfanity(commentbody))
+    return res
+      .status(400)
+      .json({ message: "Please keep comments respectful." });
   if (!isValidId(id) || !isValidId(userid))
     return res.status(400).json({ message: "Invalid comment." });
   try {

@@ -1,4 +1,9 @@
-import { ShieldAlert, ShieldCheck, MonitorSmartphone } from "lucide-react";
+import {
+  ShieldAlert,
+  ShieldCheck,
+  MonitorSmartphone,
+  MapPin,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,13 +15,16 @@ interface LoginRecord {
   loginAt: string;
   ipAddress: string;
   browser: string;
+  browserVersion?: string;
   operatingSystem: string;
   deviceType: string;
+  deviceModel?: string;
   city: string;
   state: string;
   country: string;
   isNewDevice: boolean;
   trusted: boolean;
+  trustedUntil?: string | null;
   isCurrentDevice: boolean;
 }
 
@@ -88,8 +96,8 @@ export default function SecurityPage() {
             <div>
               <h2 className="font-semibold">Devices signed in</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                One entry per device you've used to sign in. Location is
-                unavailable unless a trusted location provider is added.
+                One entry per device. Signing in from a new browser, device, IP,
+                or location requires a one-time code sent to your email.
               </p>
             </div>
           </div>
@@ -122,10 +130,23 @@ export default function SecurityPage() {
                     </div>
                     <div>
                       <p className="font-medium">
-                        {record.browser} · {record.operatingSystem}
+                        {record.browser}
+                        {record.browserVersion
+                          ? ` ${record.browserVersion}`
+                          : ""}{" "}
+                        · {record.operatingSystem}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {record.deviceType} · {record.ipAddress}
+                        {record.deviceType}
+                        {record.deviceModel
+                          ? ` (${record.deviceModel})`
+                          : ""} · {record.ipAddress}
+                      </p>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        {[record.city, record.state, record.country]
+                          .filter((part) => part && part !== "Unavailable")
+                          .join(", ") || "Location unavailable"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {record.isCurrentDevice

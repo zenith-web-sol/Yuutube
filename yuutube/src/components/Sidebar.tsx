@@ -8,6 +8,7 @@ import {
   User,
   Crown,
   ArrowDownToLine,
+  VideoIcon,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -87,6 +88,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             <Button variant="ghost" className={navLinkClasses}>
               <ArrowDownToLine className="w-5 h-5 mr-3" />
               Downloads
+            </Button>
+          </Link>
+          <Link href="/meetings" onClick={onClose}>
+            <Button variant="ghost" className={navLinkClasses}>
+              <VideoIcon className="w-5 h-5 mr-3" />
+              Meetings
             </Button>
           </Link>
 

@@ -166,8 +166,16 @@ const Comments = ({ videoId }: { videoId: string }) => {
     comments.filter((comment) => String(comment.parentid) === id);
   const error = (err: any) =>
     err?.response?.data?.message || "Something went wrong. Please try again.";
+  const [captchaChallenge, setCaptchaChallenge] = useState<{
+    question: string;
+    parentid: string | null;
+  } | null>(null);
+  const [captchaInput, setCaptchaInput] = useState("");
 
-  const submit = async (parentid: string | null = null) => {
+  const submit = async (
+    parentid: string | null = null,
+    captchaAnswer?: string,
+  ) => {
     if (!user || !text.trim()) return;
     try {
       const res = await axiosInstance.post("/comment/postcomment", {
@@ -178,12 +186,25 @@ const Comments = ({ videoId }: { videoId: string }) => {
         usercommented: user.name,
         userimage: user.image,
         language: navigator.language,
+        ...(captchaAnswer ? { captchaAnswer } : {}),
       });
       setComments((previous) => [res.data.commentData, ...previous]);
       setText("");
       setReplyTo(null);
+      setCaptchaChallenge(null);
+      setCaptchaInput("");
       setMessage("");
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.response?.data?.captchaRequired) {
+        setCaptchaChallenge({
+          question: err.response.data.question,
+          parentid,
+        });
+        setMessage(
+          err.response.data.message || "Please solve the check below.",
+        );
+        return;
+      }
       setMessage(error(err));
     }
   };
@@ -261,6 +282,11 @@ const Comments = ({ videoId }: { videoId: string }) => {
     setEditing(comment._id);
     setReplyTo(null);
     setText(comment.commentbody);
+  };
+
+  const submitCaptcha = () => {
+    if (!captchaChallenge || !captchaInput.trim()) return;
+    void submit(captchaChallenge.parentid, captchaInput.trim());
   };
 
   const translateComment = async (comment: Comment) => {
@@ -468,6 +494,28 @@ const Comments = ({ videoId }: { videoId: string }) => {
         </select>
       </div>
       {message && <p className="rounded-md bg-muted p-2 text-sm">{message}</p>}
+      {captchaChallenge && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted p-3 text-sm">
+          <span className="font-medium">
+            Solve: {captchaChallenge.question} =
+          </span>
+          <input
+            type="number"
+            value={captchaInput}
+            onChange={(event) => setCaptchaInput(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && submitCaptcha()}
+            className="w-20 rounded-md border bg-background px-2 py-1"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            onClick={submitCaptcha}
+            disabled={!captchaInput.trim()}
+          >
+            Submit
+          </Button>
+        </div>
+      )}
       {user ? (
         writeBox(() => submit(), "Add a comment...")
       ) : (

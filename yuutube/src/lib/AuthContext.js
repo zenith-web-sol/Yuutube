@@ -10,6 +10,9 @@ const UserContext = createContext({
   handlegooglesignin: async () => {},
   theme: "system",
   setTheme: async (_theme) => {},
+  otpChallenge: null,
+  submitOtp: async (_code) => ({ success: false }),
+  cancelOtpChallenge: () => {},
 });
 
 const normaliseTheme = (theme) =>
@@ -44,7 +47,9 @@ const applyTheme = (preference) => {
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [theme, setThemeState] = useState("system");
+  const [otpChallenge, setOtpChallenge] = useState(null);
   const autoCheckInterval = useRef(null);
+  const loginInFlight = useRef(false);
 
   const startAutoThemeWatch = (preference) => {
     if (autoCheckInterval.current) {
@@ -96,6 +101,7 @@ export const UserProvider = ({ children }) => {
     localStorage.removeItem("yuutube-theme");
     applyTheme("system");
     startAutoThemeWatch("system");
+    setOtpChallenge(null);
     try {
       await signOut(auth);
     } catch (error) {
@@ -104,17 +110,49 @@ export const UserProvider = ({ children }) => {
   };
 
   const completeLogin = async (firebaseuser) => {
+    if (loginInFlight.current) return;
+    loginInFlight.current = true;
     try {
       const response = await axiosInstance.post("/user/login", {
         email: firebaseuser.email,
         name: firebaseuser.displayName,
         image: firebaseuser.photoURL || "https://github.com/shadcn.png",
       });
+      if (response.data?.otpRequired) {
+        setOtpChallenge({
+          email: firebaseuser.email,
+          message: response.data.message,
+        });
+        return;
+      }
       login(response.data.result);
     } catch (error) {
       console.error("Error completing login:", error);
+    } finally {
+      loginInFlight.current = false;
     }
   };
+
+  const submitOtp = async (code) => {
+    if (!otpChallenge?.email)
+      return { success: false, message: "No pending verification." };
+    try {
+      const response = await axiosInstance.post("/user/verify-otp", {
+        email: otpChallenge.email,
+        code,
+      });
+      login(response.data.result);
+      setOtpChallenge(null);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error?.response?.data?.message || "Verification failed.",
+      };
+    }
+  };
+
+  const cancelOtpChallenge = () => setOtpChallenge(null);
 
   const handlegooglesignin = async () => {
     try {
@@ -128,7 +166,7 @@ export const UserProvider = ({ children }) => {
           "Sign-in popup was blocked. Please allow popups for this site and try again.",
         );
       } else if (error?.code === "auth/popup-closed-by-user") {
-        // User closed the popup intentionally — no action needed.
+        // Intentional close — no action needed.
       } else {
         console.error("Error during sign-in:", error);
       }
@@ -154,7 +192,17 @@ export const UserProvider = ({ children }) => {
 
   return (
     <UserContext.Provider
-      value={{ user, login, logout, handlegooglesignin, theme, setTheme }}
+      value={{
+        user,
+        login,
+        logout,
+        handlegooglesignin,
+        theme,
+        setTheme,
+        otpChallenge,
+        submitOtp,
+        cancelOtpChallenge,
+      }}
     >
       {children}
     </UserContext.Provider>

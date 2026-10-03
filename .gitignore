@@ -1,0 +1,13 @@
+# Accidental workspace-level npm artifacts.
+# The real application manifests remain tracked in /server and /yuutube.
+/node_modules/
+/package.json
+/package-lock.json
+
+# Local secrets and generated output.
+**/.env
+**/.env.*
+!.env.example
+**/node_modules/
+**/.next/
+**/*.tsbuildinfo
