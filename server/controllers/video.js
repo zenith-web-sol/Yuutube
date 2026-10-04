@@ -1,5 +1,8 @@
 import path from "path";
 import video from "../Modals/video.js";
+import users from "../Modals/Auth.js";
+
+const validUser = (id) => /^[a-f\d]{24}$/i.test(String(id || ""));
 
 export const uploadvideo = async (req, res) => {
   if (req.file === undefined) {
@@ -8,6 +11,14 @@ export const uploadvideo = async (req, res) => {
       .json({ message: "plz upload a mp4 video file only" });
   } else {
     try {
+      if (!validUser(req.body.uploader)) {
+        return res
+          .status(400)
+          .json({ message: "Please upload from a valid channel." });
+      }
+      const channel = await users.findById(req.body.uploader);
+      if (!channel)
+        return res.status(404).json({ message: "Channel not found." });
       const relativePath = path
         .join("uploads", req.file.filename)
         .replace(/\\/g, "/");
@@ -18,8 +29,8 @@ export const uploadvideo = async (req, res) => {
         filepath: relativePath,
         filetype: req.file.mimetype,
         filesize: req.file.size,
-        videochanel: req.body.videochanel,
-        uploader: req.body.uploader,
+        videochanel: channel.channelname || req.body.videochanel,
+        uploader: String(channel._id),
       });
       await file.save();
       return res.status(201).json("file uploaded successfully");

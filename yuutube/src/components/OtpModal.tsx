@@ -5,12 +5,19 @@ import { useUser } from "@/lib/AuthContext";
 
 export default function OtpModal() {
   const { otpChallenge, submitOtp, cancelOtpChallenge } = useUser();
-  const challenge = otpChallenge as unknown as { message?: string } | null;
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!challenge) return null;
+  if (!otpChallenge) return null;
+
+  const otpMessage =
+    typeof otpChallenge === "object" &&
+    otpChallenge !== null &&
+    "message" in otpChallenge &&
+    typeof (otpChallenge as { message?: string }).message === "string"
+      ? (otpChallenge as { message: string }).message
+      : "Enter the verification code.";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +27,11 @@ export default function OtpModal() {
     const result = await submitOtp(code.trim());
     setSubmitting(false);
     if (!result.success) {
-      setError("Verification failed.");
+      const errorMessage =
+        "message" in result && typeof result.message === "string"
+          ? result.message
+          : "Verification failed.";
+      setError(errorMessage);
       setCode("");
     }
   };
@@ -30,7 +41,7 @@ export default function OtpModal() {
       <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
         <h2 className="text-lg font-semibold">Verify it's you</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {challenge.message}
+          {otpMessage}
         </p>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <Input

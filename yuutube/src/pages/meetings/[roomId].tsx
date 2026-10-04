@@ -313,7 +313,6 @@ function Tile({
     </div>
   );
 }
-
 function DockButton({
   label,
   onClick,
@@ -843,6 +842,45 @@ export default function MeetingRoom() {
     );
 
     socket.on(
+      "meeting:user-joined",
+      (participant: {
+        id: string;
+        name: string;
+        isHost?: boolean;
+        isCohost?: boolean;
+        audio?: boolean;
+        video?: boolean;
+      }) => {
+        namesRef.current.set(participant.id, participant.name);
+        setRemoteRoles((current) => ({
+          ...current,
+          [participant.id]: {
+            isHost: participant.isHost,
+            isCohost: participant.isCohost,
+          },
+        }));
+        setRemoteMedia((current) => ({
+          ...current,
+          [participant.id]: {
+            audio: participant.audio,
+            video: participant.video,
+          },
+        }));
+      },
+    );
+
+    socket.on(
+      "meeting:cohost-changed",
+      ({ id, isCohost }: { id: string; isCohost: boolean }) => {
+        if (id === socketRef.current?.id) return; // self is tracked via isCohost state already
+        setRemoteRoles((current) => ({
+          ...current,
+          [id]: { ...current[id], isCohost },
+        }));
+      },
+    );
+
+    socket.on(
       "meeting:offer",
       async ({
         from,
@@ -919,34 +957,6 @@ export default function MeetingRoom() {
     );
 
     socket.on(
-      "meeting:user-joined",
-      (participant: {
-        id: string;
-        name: string;
-        isHost?: boolean;
-        isCohost?: boolean;
-        audio?: boolean;
-        video?: boolean;
-      }) => {
-        namesRef.current.set(participant.id, participant.name);
-        setRemoteRoles((current) => ({
-          ...current,
-          [participant.id]: {
-            isHost: participant.isHost,
-            isCohost: participant.isCohost,
-          },
-        }));
-        setRemoteMedia((current) => ({
-          ...current,
-          [participant.id]: {
-            audio: participant.audio,
-            video: participant.video,
-          },
-        }));
-      },
-    );
-
-    socket.on(
       "meeting:user-left",
       (payload: string | { id: string; name?: string }) => {
         const id = typeof payload === "string" ? payload : payload.id;
@@ -1011,16 +1021,11 @@ export default function MeetingRoom() {
       setLocked(next);
     });
 
-    socket.on(
-      "meeting:cohost-changed",
-      ({ id, isCohost }: { id: string; isCohost: boolean }) => {
-        if (id === socketRef.current?.id) return; // self is tracked via isCohost state already
-        setRemoteRoles((current) => ({
-          ...current,
-          [id]: { ...current[id], isCohost },
-        }));
-      },
-    );
+    socket.on("meeting:ended", () => {
+      toast.error("The host ended the meeting for everyone.");
+      clearCall();
+      void router.push("/meetings");
+    });
 
     socket.on(
       "meeting:hand",
@@ -1192,12 +1197,6 @@ export default function MeetingRoom() {
       const canvas = whiteboardRef.current;
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     });
-
-    socket.on("meeting:ended", () => {
-      toast.error("The host ended the meeting for everyone.");
-      clearCall();
-      void router.push("/meetings");
-    });
   };
 
   const joinCall = async () => {
@@ -1324,16 +1323,17 @@ export default function MeetingRoom() {
 
   const toggleLock = () => socketRef.current?.emit("meeting:toggle-lock");
   const muteAll = () => socketRef.current?.emit("meeting:mute-all");
-  const kick = (id: string) => {
-    socketRef.current?.emit("meeting:kick", { socketId: id });
-    setConfirmRemove(null);
-  };
   const endMeetingForEveryone = () => {
     setConfirmEndOpen(true);
   };
+
   const confirmEndMeeting = () => {
     setConfirmEndOpen(false);
     socketRef.current?.emit("meeting:end");
+  };
+  const kick = (id: string) => {
+    socketRef.current?.emit("meeting:kick", { socketId: id });
+    setConfirmRemove(null);
   };
   const muteParticipant = (id: string) =>
     socketRef.current?.emit("meeting:stop-audio", { socketId: id });

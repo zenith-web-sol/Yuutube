@@ -4,9 +4,9 @@ import { formatDistanceToNow } from "date-fns";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 
 const videos = "/video/vdo.mp4";
-export default function VideoCard({ video }: any) {
+export default function VideoCard({ video, linkTo, showMeta = true }: any) {
   return (
-    <Link href={`/watch/${video?._id}`} className="group">
+    <Link href={linkTo || `/watch/${video?._id}`} className="group">
       <div className="space-y-3">
         <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100">
           <video
@@ -26,13 +26,16 @@ export default function VideoCard({ video }: any) {
               {video?.videotitle}
             </h3>
             <p className="text-sm text-gray-600 mt-1">{video?.videochanel}</p>
-            <p className="text-sm text-gray-600">
-              {video?.views.toLocaleString()} views •{" "}
-              {formatDistanceToNow(new Date(video?.createdAt))} ago
-            </p>
+            {showMeta && (
+              <p className="text-sm text-gray-600">
+                {video?.views.toLocaleString()} views •{" "}
+                {formatDistanceToNow(new Date(video?.createdAt))} ago
+              </p>
+            )}
           </div>
         </div>
       </div>
     </Link>
-  );
+ 
+);
 }

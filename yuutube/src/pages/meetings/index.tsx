@@ -372,24 +372,24 @@ export default function MeetingsPage() {
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
-  const refresh = useCallback(
-    () => setMeetings(listMeetings(userKey)),
-    [userKey],
-  );
+const refresh = useCallback(
+  () => setMeetings(listMeetings(userKey)),
+  [userKey],
+);
 
-  useEffect(() => {
-    refresh();
-    window.addEventListener("focus", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [refresh]);
+useEffect(() => {
+  refresh();
+  window.addEventListener("focus", refresh);
+  window.addEventListener("storage", refresh);
+  return () => {
+    window.removeEventListener("focus", refresh);
+    window.removeEventListener("storage", refresh);
+  };
+}, [refresh]);
 
-  useEffect(() => {
-    void syncMeetingsFromServer(userKey).then(refresh);
-  }, [userKey, refresh]);
+useEffect(() => {
+  void syncMeetingsFromServer(userKey).then(refresh);
+}, [userKey, refresh]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000);
