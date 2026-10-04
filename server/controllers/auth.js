@@ -1,16 +1,24 @@
 import mongoose from "mongoose";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import users from "../Modals/Auth.js";
 
 const TRUSTED_DEVICE_DAYS = 30;
 const OTP_EXPIRY_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 5;
 
-const getTransporter = () =>
-  nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+const getResendClient = () => new Resend(process.env.RESEND_API_KEY);
+
+const sendOtpEmail = async (toEmail, code) => {
+  const resend = getResendClient();
+  const { error } = await resend.emails.send({
+    from: "YuuTube <onboarding@resend.dev>",
+    to: toEmail,
+    subject: "Your YuuTube sign-in code",
+    text: `Your verification code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
   });
+  if (error)
+    throw new Error(error.message || "Failed to send email via Resend.");
+};
 
 const getClientIp = (req) =>
   String(
@@ -118,14 +126,6 @@ const isRecordTrusted = (record) =>
 
 const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
-const sendOtpEmail = async (toEmail, code) => {
-  await getTransporter().sendMail({
-    from: process.env.EMAIL_USER,
-    to: toEmail,
-    subject: "Your YuuTube sign-in code",
-    text: `Your verification code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
-  });
-};
 
 const maskEmail = (email) => email.replace(/^(.{2}).+(@.+)$/, "$1***$2");
 
@@ -208,11 +208,9 @@ export const login = async (req, res) => {
       await sendOtpEmail(email, code);
     } catch (mailError) {
       console.error("Failed to send OTP email:", mailError);
-      return res
-        .status(502)
-        .json({
-          message: "Unable to send verification code. Please try again.",
-        });
+      return res.status(502).json({
+        message: "Unable to send verification code. Please try again.",
+      });
     }
 
     return res.status(200).json({
@@ -232,34 +230,28 @@ export const verifyOtp = async (req, res) => {
   try {
     const existingUser = await users.findOne({ email });
     if (!existingUser || !existingUser.pendingOtp?.code) {
-      return res
-        .status(400)
-        .json({
-          message: "No pending verification found. Please sign in again.",
-        });
+      return res.status(400).json({
+        message: "No pending verification found. Please sign in again.",
+      });
     }
     const pending = existingUser.pendingOtp;
 
     if (new Date(pending.expiresAt) < new Date()) {
       existingUser.pendingOtp = null;
       await existingUser.save();
-      return res
-        .status(400)
-        .json({
-          message:
-            "This code has expired. Please sign in again to receive a new one.",
-        });
+      return res.status(400).json({
+        message:
+          "This code has expired. Please sign in again to receive a new one.",
+      });
     }
 
     if (pending.attempts >= MAX_OTP_ATTEMPTS) {
       existingUser.pendingOtp = null;
       await existingUser.save();
-      return res
-        .status(429)
-        .json({
-          message:
-            "Too many incorrect attempts. Please sign in again to receive a new code.",
-        });
+      return res.status(429).json({
+        message:
+          "Too many incorrect attempts. Please sign in again to receive a new code.",
+      });
     }
 
     if (String(code).trim() !== pending.code) {
@@ -345,7 +337,9 @@ export const getUserById = async (req, res) => {
   try {
     const userdata = await users
       .findById(id)
-      .select("-loginHistory.userAgent -pendingOtp -pendingCommentCaptcha.answer");
+      .select(
+        "-loginHistory.userAgent -pendingOtp -pendingCommentCaptcha.answer",
+      );
     if (!userdata) return res.status(404).json({ message: "User not found." });
     return res.status(200).json(userdata);
   } catch (error) {
@@ -418,4 +412,3 @@ export const getSecurityHistory = async (req, res) => {
       .json({ message: "Unable to load security history." });
   }
 };
-
