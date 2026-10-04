@@ -19,14 +19,11 @@ export const uploadvideo = async (req, res) => {
       const channel = await users.findById(req.body.uploader);
       if (!channel)
         return res.status(404).json({ message: "Channel not found." });
-      const relativePath = path
-        .join("uploads", req.file.filename)
-        .replace(/\\/g, "/");
 
       const file = new video({
         videotitle: req.body.videotitle,
         filename: req.file.originalname,
-        filepath: relativePath,
+        filepath: req.file.path,
         filetype: req.file.mimetype,
         filesize: req.file.size,
         videochanel: channel.channelname || req.body.videochanel,

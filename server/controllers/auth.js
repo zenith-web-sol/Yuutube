@@ -418,3 +418,4 @@ export const getSecurityHistory = async (req, res) => {
       .json({ message: "Unable to load security history." });
   }
 };
+

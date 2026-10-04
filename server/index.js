@@ -1,8 +1,8 @@
+import "dotenv/config";
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import userroutes from "./routes/auth.js";
@@ -16,7 +16,7 @@ import downloadRoutes from "./routes/download.js";
 import translateRoutes from "./routes/translate.js";
 import { registerMeetingSockets } from "./socket/meetings.js";
 import meetingRoutes from "./routes/meeting.js"
-dotenv.config();
+
 const app = express();
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {

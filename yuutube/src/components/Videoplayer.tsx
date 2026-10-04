@@ -73,8 +73,11 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
 
   const videoSrc = useMemo(() => {
     if (!video?.filepath) return "";
+    const path = String(video.filepath);
 
-    const cleanedPath = String(video.filepath).replace(/\\/g, "/");
+    if (/^https?:\/\//i.test(path)) return path;
+
+    const cleanedPath = path.replace(/\\/g, "/");
     const uploadsPath = cleanedPath.includes("/uploads/")
       ? cleanedPath.replace(/^.*\/uploads\//, "uploads/")
       : cleanedPath.replace(/^\/+/, "");
