@@ -1,13 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { useUser } from "@/lib/AuthContext";
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export default function OtpModal() {
-  const { otpChallenge, submitOtp, cancelOtpChallenge } = useUser();
+  const { otpChallenge, submitOtp, cancelOtpChallenge, resendOtp } = useUser();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_SECONDS);
+
+  useEffect(() => {
+    if (!otpChallenge) return;
+    setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+  }, [otpChallenge]);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [secondsLeft]);
 
   if (!otpChallenge) return null;
 
@@ -36,13 +53,28 @@ export default function OtpModal() {
     }
   };
 
+  const handleResend = async () => {
+    setResending(true);
+    setError("");
+    const result = await resendOtp();
+    setResending(false);
+    if (result.success) {
+      setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+      setCode("");
+    } else {
+      const errorMessage =
+        "message" in result && typeof result.message === "string"
+          ? result.message
+          : "Couldn't resend the code.";
+      setError(errorMessage);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
         <h2 className="text-lg font-semibold">Verify it's you</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {otpMessage}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{otpMessage}</p>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <Input
             type="text"
@@ -72,6 +104,19 @@ export default function OtpModal() {
               {submitting ? "Verifying..." : "Verify"}
             </Button>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={handleResend}
+            disabled={secondsLeft > 0 || resending}
+          >
+            {resending
+              ? "Resending..."
+              : secondsLeft > 0
+                ? `Resend code in ${secondsLeft}s`
+                : "Resend code"}
+          </Button>
         </form>
       </div>
     </div>

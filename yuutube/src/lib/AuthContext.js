@@ -12,6 +12,7 @@ const UserContext = createContext({
   setTheme: async (_theme) => {},
   otpChallenge: null,
   submitOtp: async (_code) => ({ success: false }),
+  resendOtp: async () => ({ success: false }),
   cancelOtpChallenge: () => {},
 });
 
@@ -152,6 +153,26 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const resendOtp = async () => {
+    if (!otpChallenge?.email)
+      return { success: false, message: "No pending verification." };
+    try {
+      const response = await axiosInstance.post("/user/resend-otp", {
+        email: otpChallenge.email,
+      });
+      setOtpChallenge({
+        email: otpChallenge.email,
+        message: response.data.message,
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: error?.response?.data?.message || "Couldn't resend the code.",
+      };
+    }
+  };
+
   const cancelOtpChallenge = () => setOtpChallenge(null);
 
   const handlegooglesignin = async () => {
@@ -201,6 +222,7 @@ export const UserProvider = ({ children }) => {
         setTheme,
         otpChallenge,
         submitOtp,
+        resendOtp,
         cancelOtpChallenge,
       }}
     >

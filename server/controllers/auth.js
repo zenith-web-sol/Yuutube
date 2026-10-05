@@ -20,6 +20,44 @@ const sendOtpEmail = async (toEmail, code) => {
     throw new Error(error.message || "Failed to send email via Resend.");
 };
 
+export const resendOtp = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email is required." });
+  try {
+    const existingUser = await users.findOne({ email });
+    if (!existingUser || !existingUser.pendingOtp) {
+      return res.status(400).json({
+        message: "No pending verification found. Please sign in again.",
+      });
+    }
+
+    const code = generateOtp();
+    existingUser.pendingOtp = {
+      code,
+      expiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60000),
+      attempts: 0,
+      deviceSnapshot: existingUser.pendingOtp.deviceSnapshot,
+    };
+    await existingUser.save();
+
+    try {
+      await sendOtpEmail(email, code);
+    } catch (mailError) {
+      console.error("Failed to resend OTP email:", mailError);
+      return res.status(502).json({
+        message: "Unable to resend verification code. Please try again.",
+      });
+    }
+
+    return res.status(200).json({
+      message: `We sent a new code to ${maskEmail(email)}.`,
+    });
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+    return res.status(500).json({ message: "Something went wrong." });
+  }
+};
+
 const getClientIp = (req) =>
   String(
     req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown",
@@ -125,7 +163,6 @@ const isRecordTrusted = (record) =>
   !record.trustedUntil || new Date(record.trustedUntil) > new Date();
 
 const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
-
 
 const maskEmail = (email) => email.replace(/^(.{2}).+(@.+)$/, "$1***$2");
 
