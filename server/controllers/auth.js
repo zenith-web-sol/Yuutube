@@ -11,7 +11,7 @@ const getResendClient = () => new Resend(process.env.RESEND_API_KEY);
 const sendOtpEmail = async (toEmail, code) => {
   const resend = getResendClient();
   const { error } = await resend.emails.send({
-    from: "YuuTube <onboarding@resend.dev>",
+    from: "YuuTube <otp@1stzenith.site>",
     to: toEmail,
     subject: "Your YuuTube sign-in code",
     text: `Your verification code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can safely ignore this email.`,
